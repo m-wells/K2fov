@@ -2,12 +2,6 @@
 """
 import numpy as np
 
-try:
-    import matplotlib.pyplot as mp
-    import matplotlib
-except ImportError:
-    pass
-
 from . import projection as proj
 from . import rotate2 as r
 from . import greatcircle as gcircle
@@ -561,133 +555,6 @@ class KeplerFov():
         return KeplerModOut(chNumber, x=x, y=y)
 
 
-    ###
-    # Plotting code
-    ###
-
-    def plotPointing(self, maptype=None, colour='b', mod3='r', showOuts=True, **kwargs):
-        """Plot the FOV
-        """
-
-        if maptype is None:
-            maptype=self.defaultMap
-
-        radec = self.currentRaDec
-        for ch in radec[:,2][::4]:
-
-            idx = np.where(radec[:,2].astype(np.int) == ch)[0]
-            idx = np.append(idx, idx[0])  #% points to draw a box
-
-            c = colour
-            if ch in self.brokenChannels:
-                c = mod3
-            maptype.plot(radec[idx, 3], radec[idx, 4], '-', color=c, **kwargs)
-            #Show the origin of the col and row coords for this ch
-            if showOuts:
-                maptype.plot(radec[idx[0], 3], radec[idx[0],4], 'o', color=c)
-
-
-    def plotOutline(self, maptype=None, colour='#AAAAAA', **kwargs):
-        """Plot an outline of the FOV.
-        """
-
-        if maptype is None:
-            maptype=self.defaultMap
-
-        xarr = []
-        yarr = []
-        radec = self.currentRaDec
-        for ch in [20,4,11,28,32, 71,68, 84, 75, 60, 56, 15 ]:
-            idx = np.where(radec[:,2].astype(np.int) == ch)[0]
-            idx = idx[0]    #Take on the first one
-            x, y = maptype.skyToPix(radec[idx][3], radec[idx][4])
-            xarr.append(x)
-            yarr.append(y)
-
-        verts = np.empty( (len(xarr), 2))
-        verts[:,0] = xarr
-        verts[:,1] = yarr
-
-        #There are two ways to specify line colour
-        ec = kwargs.pop('ec', "none")
-        ec = kwargs.pop('edgecolor', ec)
-        p = matplotlib.patches.Polygon(verts, fill=True, ec=ec, fc=colour, **kwargs)
-        mp.gca().add_patch(p)
-
-
-    def plotSpacecraftYAxis(self, maptype=None):
-        """Plot a line pointing in the direction of the spacecraft
-        y-axis (i.e normal to the solar panel
-        """
-
-        if maptype is None:
-            maptype=self.defaultMap
-        #Plot direction of spacecraft +y axis. The subtraction of
-        #90 degrees accounts for the different defintions of where
-        #zero roll is.
-        yAngle_deg = getSpacecraftRollAngleFromFovAngle(self.roll0_deg)
-        yAngle_deg -=90
-
-        a,d = gcircle.sphericalAngDestination(self.ra0_deg, self.dec0_deg, -yAngle_deg, 12.0)
-        x0, y0 = maptype.skyToPix(self.ra0_deg, self.dec0_deg)
-        x1, y1 = maptype.skyToPix(a, d)
-        mp.plot([x0, x1], [y0, y1], 'k-')
-
-
-    def plotChIds(self, maptype=None, modout=False):
-        """Print the channel numbers on the plotting display
-
-        Note:
-        ---------
-        This method will behave poorly if you are plotting in
-        mixed projections. Because the channel vertex polygons
-        are already projected using self.defaultMap, applying
-        this function when plotting in a different reference frame
-        may cause trouble.
-        """
-        if maptype is None:
-            maptype = self.defaultMap
-
-        polyList = self.getAllChannelsAsPolygons(maptype)
-        for p in polyList:
-            p.identifyModule(modout=modout)
-
-
-    def getWcsForChannel1(self, ch):
-        raise NotImplementedError("getWcsForChannel doesn't work")
-        crpix =np.array( [500, 500])    #Rough guess at centre
-        a,d = self.getRaDecForChannelColRow(ch, crpix[0], crpix[1])
-        crval = np.array([a,d])
-
-        #Get rotation of channel relative to FOV
-        kepModule = self.getChannelAsPolygon(ch)
-        vZero =  kepModule.polygon[0,:]
-        vCol = kepModule.polygon[1,:] - vZero
-        vRow = kepModule.polygon[3,:] - vZero
-        ang_rad = np.arctan2(vCol[1], vCol[0])
-        #ang_rad -= np.radians(.2308)   #Debugging code
-
-        if np.cross(vCol, vRow) >= 0:
-            sign = +1
-        else:
-            sign = -1
-
-        CD = np.empty( (2,2))
-        CD[0,0] = np.cos(ang_rad)
-        CD[0,1] = np.sin(ang_rad)
-        CD[1,0] = -np.sin(ang_rad)
-        CD[1,1] = np.cos(ang_rad)
-
-        if sign < 0:
-            CD[1,:] *= -1
-
-        CD *= self.plateScale_arcsecPerPix/3600.
-
-        return crval, crpix, CD
-
-
-
-
 ###############################################
 # Polygon and KepModule code
 ################################################
@@ -753,23 +620,6 @@ class Polygon():
             return True
         return False
 
-    def draw(self, **kwargs):
-        """Draw the polygon
-
-        Optional Inputs:
-        ------------
-        All optional inputs are passed to ``matplotlib.patches.Polygon``
-
-        Notes:
-        ---------
-        Does not accept maptype as an argument.
-        """
-
-        ax = mp.gca()
-        shape = matplotlib.patches.Polygon(self.polygon, **kwargs)
-        ax.add_artist(shape)
-
-
 class KeplerModOut(Polygon):
     def __init__(self, channel, x=None, y=None, pointList=None):
         """A Polygon with a channel identification attached to it"""
@@ -778,38 +628,6 @@ class KeplerModOut(Polygon):
 
     def getChannel(self):
         return self.channel
-
-
-    def identifyModule(self, modout=False):
-        """Write the name of a channel/modout on a plot
-
-        Optional Inputs:
-        -----------
-        modout
-            (boolean). If True, write module and output. Otherwise
-            write channel number
-
-        Returns:
-        ------------
-        **None**
-
-        Output:
-        -----------
-        Channel numbers are written to the current axis.
-
-        """
-        x,y = np.mean(self.polygon, 0)
-
-        if modout:
-            modout = modOutFromChannel(self.channel)
-            mp.text(x, y, "%i-%i" %(modout[0], modout[1]), fontsize=8, \
-                ha="center", clip_on=True)
-        else:
-            mp.text(x,y, "%i" %(self.channel), fontsize=8, \
-                ha="center", clip_on=True)
-
-
-
 
 #########################################################
 #  channel <--> mod out
@@ -869,13 +687,3 @@ def loadChannelModOutLookup():
 
     return lookup
 
-
-#####################################################################
-#####################################################################
-#####################################################################
-
-#def getRaDecOut(vectors):
-    #raDecOut = np.empty( (len(vectors), 2))
-    #for i, row in enumerate(vectors):
-        #raDecOut[i] = r.raDecFromVec(row)
-    #return raDecOut

@@ -4,35 +4,9 @@ where RA and Dec are in decimal degrees
 """
 from __future__ import division, print_function
 import sys
+import numpy as np
 
 from . import logger
-
-# Try importing numpy
-try:
-    import numpy as np
-except Exception:
-    logger.error('You need numpy installed')
-    sys.exit(1)
-
-# Try importing matplotlib
-try:
-    import matplotlib.pyplot as pl
-    got_mpl = True
-    params = {
-                'axes.linewidth': 1.5,
-                'axes.labelsize': 24,
-                'font.family': 'sans-serif',
-                'font.size': 22,
-                'legend.fontsize': 14,
-                'xtick.labelsize': 16,
-                'ytick.labelsize': 16,
-                'text.usetex': False,
-             }
-    pl.rcParams.update(params)
-except Exception:
-    logger.warning('You need matplotlib installed to get a plot')
-    got_mpl = False
-
 from . import fields
 from . import projection as proj
 from . import DEFAULT_PADDING
@@ -167,34 +141,6 @@ def K2onSilicon(infile, fieldnum, do_nearSiliconCheck=False):
                         )
         nearSilicon = np.array(nearSilicon, dtype=bool)
 
-    if got_mpl:
-        almost_black = '#262626'
-        light_grey = np.array([float(248)/float(255)]*3)
-        ph = proj.PlateCaree()
-        k.plotPointing(ph, showOuts=False)
-        targets = ph.skyToPix(ra_sources_deg, dec_sources_deg)
-        targets = np.array(targets)
-        fig = pl.gcf()
-        ax = fig.gca()
-        ax = fig.add_subplot(111)
-        ax.scatter(*targets, color='#fc8d62', s=7, label='not on silicon')
-        ax.scatter(targets[0][onSilicon], targets[1][onSilicon],
-                   color='#66c2a5', s=8, label='on silicon')
-        ax.set_xlabel('R.A. [degrees]', fontsize=16)
-        ax.set_ylabel('Declination [degrees]', fontsize=16)
-        ax.invert_xaxis()
-        ax.minorticks_on()
-        legend = ax.legend(loc=0, frameon=True, scatterpoints=1)
-        rect = legend.get_frame()
-        rect.set_alpha(0.3)
-        rect.set_facecolor(light_grey)
-        rect.set_linewidth(0.0)
-        texts = legend.texts
-        for t in texts:
-            t.set_color(almost_black)
-        fig.savefig('targets_fov.png', dpi=300)
-        pl.close('all')
-
     # prints zero if target is not on silicon
     siliconFlag = np.zeros_like(ra_sources_deg)
 
@@ -209,10 +155,7 @@ def K2onSilicon(infile, fieldnum, do_nearSiliconCheck=False):
     np.savetxt('targets_siliconFlag.csv', outarr.T, delimiter=', ',
                fmt=['%10.10f', '%10.10f', '%10.2f', '%i'])
 
-    if got_mpl:
-        print('I made two files: targets_siliconFlag.csv and targets_fov.png')
-    else:
-        print('I made one file: targets_siliconFlag.csv')
+    print('I made one file: targets_siliconFlag.csv')
 
 
 def K2onSilicon_main(args=None):

@@ -1,12 +1,7 @@
 """This file defines the projection classes."""
-try:
-    import matplotlib.pyplot as mp
-except Exception:
-    pass
 
 import numpy as np
 from . import rotate
-
 
 class Projection():
     """Base Projection class. Used for mapping ra and dec into
@@ -111,161 +106,6 @@ class Projection():
             return True
         return False
 
-
-    def plot(self, ra_deg, dec_deg, *args, **kwargs):
-        x,y = self.skyToPix(ra_deg, dec_deg)
-        self._plot(x, y, *args, **kwargs)
-
-    def scatter(self,  ra_deg, dec_deg, *args, **kwargs):
-        x,y = self.skyToPix(ra_deg, dec_deg)
-        mp.scatter(x,y, *args, **kwargs)
-
-
-    def text(self, ra_deg, dec_deg, s, *args, **kwargs):
-        x,y = self.skyToPix(ra_deg, dec_deg)
-        mp.text(x, y, s, *args, **kwargs)
-
-
-
-    def plotGrid(self, numLines=(5,5), lineWidth=1, colour="#777777"):
-        """Plot NUMLINES[0] vertical gridlines and NUMLINES[1] horizontal gridlines,
-        while keeping the initial axes bounds that were present upon its calling.
-        Will not work for certain cases.
-        """
-        x1, x2, y1, y2 = mp.axis()
-        ra1, dec0 = self.pixToSky(x1, y1)
-        ra0, dec1 = self.pixToSky(x2, y2)
-
-        xNum, yNum = numLines
-        self.raRange, self.decRange  = self.getRaDecRanges(numLines)
-
-        #import pdb; pdb.set_trace()
-        #Guard against Ra of zero within the plot
-        a1 = np.abs(ra1-ra0)
-        a2 = np.abs( min(ra0, ra1) - (max(ra0, ra1) - 360))
-        if a2 < a1:     #Then we straddle 360 degrees in RA
-            if ra0 < ra1:
-                ra1 -= 360
-            else:
-                ra0 -= 360
-
-
-        #Draw lines of constant dec
-        lwr = min(ra0, ra1)
-        upr = max(ra0, ra1)
-        stepX = round((upr-lwr) / float(xNum))
-        ra_deg = np.arange(lwr - 3*stepX, upr + 3.5*stepX, 1, dtype=np.float)
-        for dec in self.decRange:
-            self.plotLine(ra_deg, dec, '-', color = colour, linewidth = lineWidth)
-
-
-        #Draw lines of const ra
-        lwr = min(dec0, dec1)
-        upr = max(dec0, dec1)
-        stepY = round((upr-lwr) / float(yNum))
-        dec_deg = np.arange(dec0 - 3*stepY, dec1 + 3.5*stepY, 1, dtype=np.float)
-        for ra in self.raRange:
-            self.plotLine(ra, dec_deg, '-', color = colour, linewidth = lineWidth)
-
-        mp.axis([x1, x2, y1, y2])
-
-
-
-    def labelAxes(self, numLines=(5,5)):
-        """Put labels on axes
-
-        Note: I should do better than this by picking round numbers
-        as the places to put the labels.
-
-        Note: If I ever do rotated projections, this simple approach
-        will fail.
-        """
-
-        x1, x2, y1, y2 = mp.axis()
-        ra1, dec0 = self.pixToSky(x1, y1)
-        raRange, decRange = self.getRaDecRanges(numLines)
-        ax = mp.gca()
-
-        x_ticks = self.skyToPix(raRange, dec0)[0]
-        y_ticks = self.skyToPix(ra1, decRange)[1]
-
-        ax.xaxis.set_ticks(x_ticks)
-        ax.xaxis.set_ticklabels([str(int(i)) for i in raRange])
-        mp.xlabel("Right Ascension (deg)")
-
-        ax.yaxis.set_ticks(y_ticks)
-        ax.yaxis.set_ticklabels([str(int(i)) for i in decRange])
-        mp.ylabel("Declination (deg)")
-
-
-    def getRaDecRanges(self, numLines):
-        """Pick suitable values for ra and dec ticks
-
-        Used by plotGrid and labelAxes
-        """
-        x1, x2, y1, y2 = mp.axis()
-
-        ra0, dec0 = self.pixToSky(x1, y1)
-        ra1, dec1 = self.pixToSky(x2, y2)
-
-        #Deal with the case where ra range straddles 0.
-        #Different code for case where ra increases left to right, or decreases.
-        if self.isPositiveMap():
-            if ra1 < ra0:
-                ra1 += 360
-        else:
-            if ra0 < ra1:
-                ra0 += 360
-
-        raMid = .5*(ra0+ra1)
-        decMid = .5*(dec0+dec1)
-
-
-        xNum, yNum = numLines
-        stepX = round((ra1 - ra0) / xNum)
-        stepY = round((dec1 - dec0) / yNum)
-
-        rangeX = stepX * (xNum - 1)
-        rangeY = stepY * (yNum - 1)
-
-        raStart = np.round(raMid - rangeX/2.)
-        decStart = np.round(decMid - rangeY/2.)
-
-        raRange = np.arange(raStart, raStart + stepX*xNum, stepX)
-        decRange = np.arange(decStart, decStart + stepY*yNum, stepY)
-        raRange = np.fmod(raRange, 360.)
-
-        return raRange, decRange
-
-
-    def plotLine(self, ra_deg, dec_deg, *args, **kwargs):
-        ra_deg, dec_deg = self.parseInputs(ra_deg, dec_deg)
-        x,y = self.skyToPix(ra_deg, dec_deg, catchInvalid=False)
-
-        diffX = np.abs(np.diff(x))
-        idx1 = diffX > 3*np.mean(diffX)
-        idx1[idx1 + 1] = True
-
-        diffY = np.abs(np.diff(y))
-        idx2 = diffY > 3*np.mean(diffY)
-
-        j = 0
-        i0 = 0
-        if len(idx2) > 0:
-            idx2[-1] = True
-
-        idx = np.where(np.logical_or(idx1, idx2))[0]
-        for j in range(len(idx)):
-            i1 = idx[j]
-            self._plot(x[i0:i1], y[i0:i1], *args, **kwargs)
-            i0 = i1+1
-
-
-
-    def _plot(self, x, y, *args,  **kwargs):
-        mp.plot(x,y, *args, **kwargs)
-
-
 class PlateCaree(Projection):
     """Synonym for the base class"""
     pass
@@ -317,14 +157,6 @@ class HammerAitoff(Projection):
         y = gamma*sin(lat_rad)
 
         return x, y
-
-    def pixToSky(self, x, y):
-        raise NotImplementedError("pixToSky not defined!")
-
-    def labelAxes(self, nLabel=5):
-        """Put labels on axes"""
-        raise NotImplementedError("Axis labels not available in HA yet")
-
 
 class Gnomic(Projection):
     def __init__(self, ra0_deg, dec0_deg):
@@ -469,7 +301,3 @@ class Cylindrical2(Projection):
         y = np.sin( np.radians(dec_deg))
         return x, y
 
-    #def pixToSky(self, x, y, **kwargs):
-        #ra = np.degrees(x)
-        #dec = np.degrees(np.arcsin(y))
-        #return ra, dec
